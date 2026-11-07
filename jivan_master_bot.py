@@ -125,9 +125,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
         </div>
     </div>
     <script>
-        const TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0";
-        const TG_CHAT_ID = "-1003934563963";
-        
         const API_URL_30S = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
         const API_URL_1M = "https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json";
 
@@ -251,19 +248,46 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
+        // --- ENHANCED STREAK COUNTER & PATTERN MATCHING ALGORITHM ---
         function analyzeMarketPattern(history_list) {
-            if (!history_list || history_list.length < 3) return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
-            let recent = history_list.slice(0, 3).map(r => r.size);
-            if (recent[0] !== recent[1] && recent[1] !== recent[2]) {
+            if (!history_list || history_list.length < 4) return { prediction: "WAITING", pattern: "मार्केट स्कैन हो रहा है..." };
+            
+            let recent = history_list.slice(0, 4).map(r => r.size);
+            
+            // 1. Strict Zig-Zag Check (e.g. BIG, SMALL, BIG, SMALL)
+            if (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
-                return { prediction: pred, pattern: "⚡ 3-ROUND ZIG-ZAG (" + pred + ")" };
+                return { prediction: pred, pattern: "⚡ ZIG-ZAG PATTERN (" + pred + ")" };
             }
+            
+            // 2. 2/1 Pattern Flip Check
             if (recent[0] === recent[1] && recent[1] !== recent[2]) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
-                return { prediction: pred, pattern: "🔄 2/1 PATTERN FLIP (" + pred + ")" };
+                return { prediction: pred, pattern: "🔄 2/1 FLIP TREND (" + pred + ")" };
             }
-            if (shiftToCurrent) { return { prediction: recent[0], pattern: "🎯 LOSS-SHIFT (" + recent[0] + ")" }; }
-            return { prediction: recent[0], pattern: "🐉 TREND FOLLOW (" + recent[0] + ")" };
+            
+            // 3. Loss-Shift Check
+            if (shiftToCurrent) { 
+                return { prediction: recent[0], pattern: "🎯 LOSS-SHIFT RECOVERY (" + recent[0] + ")" }; 
+            }
+            
+            // 4. Strong Streak / Dragon Trend Detection (Streak Counter)
+            let streakCount = 1;
+            for (let i = 0; i < recent.length - 1; i++) {
+                if (recent[i] === recent[i+1]) {
+                    streakCount++;
+                } else {
+                    break;
+                }
+            }
+            
+            // If clear streak of 3 or more is found, follow the dragon
+            if (streakCount >= 3) {
+                return { prediction: recent[0], pattern: "🐉 DRAGON TREND STREAK (" + recent[0] + ")" };
+            }
+
+            // Default safe trend follow
+            return { prediction: recent[0], pattern: "📈 TREND FOLLOW (" + recent[0] + ")" };
         }
 
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
@@ -533,7 +557,6 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         params = parse_qs(post_data)
         entered_pass = params.get('password', [''])[0]
 
-        # Check if login is for Master Admin Panel
         if self.path.startswith("/admin_master_jivan") and entered_pass == security_config["dashboard_password"]:
             self.send_response(303)
             self.send_header('Set-Cookie', 'admin_auth=master_verified; Path=/; Max-Age=3600')
@@ -541,7 +564,6 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        # Check if entered password is blocked in user db
         if entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Blocked":
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
@@ -560,7 +582,6 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(blocked_msg_html.encode('utf-8'))
             return
 
-        # Check master password or active user password for dashboard login
         if entered_pass == security_config["dashboard_password"] or (entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Active"):
             self.send_response(303)
             self.send_header('Set-Cookie', 'auth_token=jivan_vip_auth; Path=/; Max-Age=31536000')
