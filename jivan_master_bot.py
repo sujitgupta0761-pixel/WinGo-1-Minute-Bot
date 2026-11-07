@@ -7,6 +7,12 @@ from urllib.parse import parse_qs, urlparse
 active_sessions = {}
 blocked_ips = set()
 
+# User Passwords Database: {"password_string": "Active" / "Blocked"}
+user_passwords_db = {
+    "vip123": "Active",
+    "jivan99": "Active"
+}
+
 security_config = {
     "password_enabled": True,
     "dashboard_password": "8709"
@@ -36,7 +42,7 @@ HTML_LOGIN = """<!DOCTYPE html>
     <div class="login-card">
         <div class="logo-icon">👑</div>
         <h2>Jivan Master VIP</h2>
-        <p>सुरक्षित क्षेत्र: कृपया पासवर्ड दर्ज करें।</p>
+        <p>डैशबोर्ड एक्सेस करने के लिए अपना लॉगिन पासवर्ड दर्ज करें।</p>
         <form method="POST">
             <input type="password" name="password" placeholder="••••••••" required autofocus>
             <button type="submit">अनलॉक करें ➔</button>
@@ -162,6 +168,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             fetchAndProcess();
         }
 
+        // Copy list: Oldest to Newest, LIVE target at bottom
         function copyResultsList() {
             if (historyLog.length === 0 && !lockedPrediction) {
                 alert("❌ अभी कोई डेटा उपलब्ध नहीं है!");
@@ -224,7 +231,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             if (toggleBox.checked) {
                 toggleBox.checked = false;
                 let pass = prompt("🔒 सुरक्षित क्षेत्र: टेलीग्राम ऑटोमेशन ऑन करने के लिए पासवर्ड दर्ज करें:");
-                if (pass === security_config.dashboard_password) { toggleBox.checked = true; alert("✅ टेलीग्राम ऑन हो गया!"); }
+                if (pass === "8709") { toggleBox.checked = true; alert("✅ टेलीग्राम ऑन हो गया!"); }
                 else if (pass !== null) { alert("❌ गलत पासवर्ड!"); }
             }
         }
@@ -385,25 +392,22 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(blocked_html.encode('utf-8'))
             return
 
+        # ADMIN PANEL ROUTE
         if path == "/admin_master_jivan":
             cookie_header = self.headers.get('Cookie', '')
-            # Secure admin: Check if admin session token exists or pass query is correct
-            admin_pass = query.get('pass', [''])[0]
-            
-            if f"admin_auth=jivan_admin_token" not in cookie_header and admin_pass != security_config["dashboard_password"]:
-                # Show Admin Login Page
+            if "admin_auth=master_verified" not in cookie_header:
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(HTML_LOGIN.replace('%ERROR_MSG%', '').encode('utf-8'))
+                admin_login_html = HTML_LOGIN.replace('डैशबोर्ड एक्सेस करने के लिए अपना लॉगिन पासवर्ड दर्ज करें।', 'मास्टर एडमिन पैनल खोलने के लिए मास्टर पासवर्ड दर्ज करें।')
+                self.wfile.write(admin_login_html.replace('%ERROR_MSG%', '').encode('utf-8'))
                 return
             
-            # If admin passed via query or cookie, set admin token cookie
-            if admin_pass == security_config["dashboard_password"]:
-                pass # valid query pass
-
             action = query.get('action', [''])[0]
             target_ip = query.get('ip', [''])[0]
+            target_upass = query.get('upass', [''])[0]
+            new_upass = query.get('new_upass', [''])[0]
+
             if action == 'block' and target_ip:
                 blocked_ips.add(target_ip)
             elif action == 'unblock' and target_ip:
@@ -413,9 +417,16 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             elif action == 'set_pass':
                 new_p = query.get('new_p', [''])[0]
                 if new_p: security_config["dashboard_password"] = new_p
+            elif action == 'add_user' and new_upass:
+                user_passwords_db[new_upass.strip()] = "Active"
+            elif action == 'block_user' and target_upass:
+                if target_upass in user_passwords_db: user_passwords_db[target_upass] = "Blocked"
+            elif action == 'unblock_user' and target_upass:
+                if target_upass in user_passwords_db: user_passwords_db[target_upass] = "Active"
+            elif action == 'delete_user' and target_upass:
+                if target_upass in user_passwords_db: del user_passwords_db[target_upass]
 
             self.send_response(200)
-            self.send_header('Set-Cookie', 'admin_auth=jivan_admin_token; Path=/; Max-Age=3600')
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
             
@@ -424,23 +435,49 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             
             html = f"""
             <html>
-            <head><title>Jivan Master Admin</title></head>
+            <head><title>Jivan Master Admin Panel</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
                 <h1>👑 Jivan Master Admin Panel 👑</h1>
-                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:20px auto; width:70%; border:1px solid #38bdf8;">
-                    <h3 style="color:#fbbf24; margin-top:0;">🔑 वर्तमान पासवर्ड (Current Password): <span style="background:#0f172a; padding:4px 12px; border-radius:6px; border:1px solid #475569; color:#38bdf8; font-family:monospace; font-size:18px;">{current_pass_val}</span></h3>
-                    <hr style="border-color:#334155; margin:15px 0;">
-                    <h3>🔐 पासवर्ड सुरक्षा (Password Gate): <b style="color: {'#22c55e' if security_config['password_enabled'] else '#ef4444'};">{sec_status}</b></h3>
-                    <a href="/admin_master_jivan?action=toggle_sec" style="background:#38bdf8; color:#0f172a; padding:8px 15px; text-decoration:none; border-radius:6px; font-weight:bold;">चालू/बंद करें (TOGGLE)</a>
+                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:15px auto; width:80%; max-width:600px; border:1px solid #38bdf8;">
+                    <h3 style="color:#fbbf24; margin-top:0;">🔑 Master Password: <span style="background:#0f172a; padding:4px 12px; border-radius:6px; border:1px solid #475569; color:#38bdf8; font-family:monospace; font-size:16px;">{current_pass_val}</span></h3>
+                    <hr style="border-color:#334155; margin:12px 0;">
+                    <h3>🔐 Password Gate: <b style="color: {'#22c55e' if security_config['password_enabled'] else '#ef4444'};">{sec_status}</b></h3>
+                    <a href="/admin_master_jivan?action=toggle_sec" style="background:#38bdf8; color:#0f172a; padding:6px 12px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:12px;">चालू/बंद करें (TOGGLE)</a>
                     <br><br>
                     <form action="/admin_master_jivan" method="GET">
                         <input type="hidden" name="action" value="set_pass">
-                        <input type="text" name="new_p" placeholder="नया पासवर्ड दर्ज करें" style="padding:6px; border-radius:4px;" required>
-                        <button type="submit" style="background:#22c55e; color:#fff; border:0; padding:7px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">पासवर्ड बदलें</button>
+                        <input type="text" name="new_p" placeholder="नया मास्टर पासवर्ड" style="padding:6px; border-radius:4px;" required>
+                        <button type="submit" style="background:#22c55e; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">मास्टर पासवर्ड बदलें</button>
                     </form>
                 </div>
+
+                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:15px auto; width:80%; max-width:600px; border:1px solid #22c55e;">
+                    <h3 style="color:#22c55e; margin-top:0;">👥 Add User Login Password</h3>
+                    <form action="/admin_master_jivan" method="GET">
+                        <input type="hidden" name="action" value="add_user">
+                        <input type="text" name="new_upass" placeholder="नया यूजर पासवर्ड बनाएं" style="padding:8px; border-radius:6px; width:60%;" required>
+                        <button type="submit" style="background:#22c55e; color:#fff; border:0; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">पासवर्ड जोड़ें</button>
+                    </form>
+                </div>
+
+                <h3>Registered User Passwords & Status</h3>
+                <table border="1" style="margin:10px auto; width:80%; max-width:600px; border-collapse:collapse; text-align:center;">
+                    <tr style="background:#1e293b; color:#38bdf8;"><th>User Password</th><th>Status</th><th>Actions</th></tr>
+            """
+            for upass, ustat in user_passwords_db.items():
+                stat_html = "<span style='color:green;'>Active</span>" if ustat == "Active" else "<span style='color:red;'>Blocked</span>"
+                if ustat == "Active":
+                    act_btn = f"<a href='/admin_master_jivan?action=block_user&upass={upass}' style='color:red; font-weight:bold; margin-right:10px;'>BLOCK</a>"
+                else:
+                    act_btn = f"<a href='/admin_master_jivan?action=unblock_user&upass={upass}' style='color:green; font-weight:bold; margin-right:10px;'>UNBLOCK</a>"
+                del_btn = f"<a href='/admin_master_jivan?action=delete_user&upass={upass}' style='color:#fbbf24; font-weight:bold;'>DELETE</a>"
+                html += f"<tr><td><b>{upass}</b></td><td>{stat_html}</td><td>{act_btn} {del_btn}</td></tr>"
+
+            html += """
+                </table>
+
                 <h3>Connected Devices & Block Control</h3>
-                <table border="1" style="margin:20px auto; width:80%; border-collapse:collapse; text-align:center;">
+                <table border="1" style="margin:10px auto; width:80%; max-width:600px; border-collapse:collapse; text-align:center;">
                     <tr style="background:#1e293b; color:#38bdf8;"><th>IP Address</th><th>Status</th><th>Action</th></tr>
             """
             for ip in list(active_sessions.keys()):
@@ -460,7 +497,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
 
         if security_config["password_enabled"]:
             cookie_header = self.headers.get('Cookie', '')
-            if f"auth_token=jivan_vip_auth" not in cookie_header:
+            if "auth_token=jivan_vip_auth" not in cookie_header:
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
@@ -496,18 +533,39 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         params = parse_qs(post_data)
         entered_pass = params.get('password', [''])[0]
 
-        if entered_pass == security_config["dashboard_password"]:
-            # Check if POST came from admin page login
-            if self.path.startswith("/admin_master_jivan"):
-                self.send_response(303)
-                self.send_header('Set-Cookie', 'admin_auth=jivan_admin_token; Path=/; Max-Age=3600')
-                self.send_header('Location', '/admin_master_jivan')
-                self.end_headers()
-            else:
-                self.send_response(303)
-                self.send_header('Set-Cookie', 'auth_token=jivan_vip_auth; Path=/; Max-Age=31536000')
-                self.send_header('Location', '/')
-                self.end_headers()
+        # Check if login is for Master Admin Panel
+        if self.path.startswith("/admin_master_jivan") and entered_pass == security_config["dashboard_password"]:
+            self.send_response(303)
+            self.send_header('Set-Cookie', 'admin_auth=master_verified; Path=/; Max-Age=3600')
+            self.send_header('Location', '/admin_master_jivan')
+            self.end_headers()
+            return
+
+        # Check if entered password is blocked in user db
+        if entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Blocked":
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            blocked_msg_html = """
+            <!DOCTYPE html>
+            <html lang="hi">
+            <head><meta charset="UTF-8"><title>Password Blocked</title></head>
+            <body style="background:#040814; color:#fff; font-family:sans-serif; text-align:center; padding-top:20vh;">
+                <h1 style="color:#ef4444;">🚫 आपका यह पासवर्ड ब्लॉक कर दिया गया है!</h1>
+                <p style="font-size:16px; color:#94a3b8;">अनब्लॉक कराने या बात करने के लिए कृपया मास्टर एडमिन से टेलीग्राम पर संपर्क करें:</p>
+                <a href="https://t.me/VIPGUPTAA" target="_blank" style="color:#38bdf8; font-size:22px; font-weight:bold; text-decoration:none;">@VIPGUPTAA</a>
+            </body>
+            </html>
+            """
+            self.wfile.write(blocked_msg_html.encode('utf-8'))
+            return
+
+        # Check master password or active user password for dashboard login
+        if entered_pass == security_config["dashboard_password"] or (entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Active"):
+            self.send_response(303)
+            self.send_header('Set-Cookie', 'auth_token=jivan_vip_auth; Path=/; Max-Age=31536000')
+            self.send_header('Location', '/')
+            self.end_headers()
         else:
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
