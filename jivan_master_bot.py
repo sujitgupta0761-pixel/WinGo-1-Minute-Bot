@@ -36,10 +36,10 @@ HTML_LOGIN = """<!DOCTYPE html>
     <div class="login-card">
         <div class="logo-icon">👑</div>
         <h2>Jivan Master VIP</h2>
-        <p>30S & 1M दोनों डैशबोर्ड खोलने के लिए पासवर्ड दर्ज करें।</p>
+        <p>सुरक्षित क्षेत्र: कृपया पासवर्ड दर्ज करें।</p>
         <form method="POST">
             <input type="password" name="password" placeholder="••••••••" required autofocus>
-            <button type="submit">डैशबोर्ड अनलॉक करें ➔</button>
+            <button type="submit">अनलॉक करें ➔</button>
         </form>
         %ERROR_MSG%
     </div>
@@ -81,7 +81,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
 </head>
 <body>
     <div class="vip-card">
-        <a href="/admin_master_jivan?pass=8709" class="admin-icon-btn">👑 Admin</a>
+        <a href="/admin_master_jivan" class="admin-icon-btn">👑 Admin</a>
         <div class="header-title" id="dashboard-title">Jivan dashboard VIP 30S</div>
         <div class="mode-selector">
             <button class="mode-btn active" id="btn-30s" onclick="switchMode('30S')">⚡ 30 सेकंड</button>
@@ -162,7 +162,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             fetchAndProcess();
         }
 
-        // Copy list: Oldest to Newest (descending in copy), LIVE target at bottom
         function copyResultsList() {
             if (historyLog.length === 0 && !lockedPrediction) {
                 alert("❌ अभी कोई डेटा उपलब्ध नहीं है!");
@@ -225,7 +224,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             if (toggleBox.checked) {
                 toggleBox.checked = false;
                 let pass = prompt("🔒 सुरक्षित क्षेत्र: टेलीग्राम ऑटोमेशन ऑन करने के लिए पासवर्ड दर्ज करें:");
-                if (pass === "8709") { toggleBox.checked = true; alert("✅ टेलीग्राम ऑन हो गया!"); }
+                if (pass === security_config.dashboard_password) { toggleBox.checked = true; alert("✅ टेलीग्राम ऑन हो गया!"); }
                 else if (pass !== null) { alert("❌ गलत पासवर्ड!"); }
             }
         }
@@ -314,8 +313,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
 
                     records.unshift({ size: actual_size, predicted: lockedPrediction });
                     if (records.length > 30) records.pop();
-                    
-                    // Dashboard table: newest stays on top (unshift)
                     historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size, status: result_status });
                     if (historyLog.length > 20) historyLog.pop();
                     lockedPrediction = null;
@@ -389,13 +386,22 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             return
 
         if path == "/admin_master_jivan":
+            cookie_header = self.headers.get('Cookie', '')
+            # Secure admin: Check if admin session token exists or pass query is correct
             admin_pass = query.get('pass', [''])[0]
-            if admin_pass != "8709":
-                self.send_response(401)
+            
+            if f"admin_auth=jivan_admin_token" not in cookie_header and admin_pass != security_config["dashboard_password"]:
+                # Show Admin Login Page
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(b"<h1>401 Unauthorized</h1>")
+                self.wfile.write(HTML_LOGIN.replace('%ERROR_MSG%', '').encode('utf-8'))
                 return
             
+            # If admin passed via query or cookie, set admin token cookie
+            if admin_pass == security_config["dashboard_password"]:
+                pass # valid query pass
+
             action = query.get('action', [''])[0]
             target_ip = query.get('ip', [''])[0]
             if action == 'block' and target_ip:
@@ -409,22 +415,25 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 if new_p: security_config["dashboard_password"] = new_p
 
             self.send_response(200)
+            self.send_header('Set-Cookie', 'admin_auth=jivan_admin_token; Path=/; Max-Age=3600')
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
             
             sec_status = "🟢 ON (सक्रिय)" if security_config["password_enabled"] else "🔴 OFF (बंद)"
+            current_pass_val = security_config["dashboard_password"]
             
             html = f"""
             <html>
             <head><title>Jivan Master Admin</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
                 <h1>👑 Jivan Master Admin Panel 👑</h1>
-                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:20px auto; width:60%; border:1px solid #38bdf8;">
+                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:20px auto; width:70%; border:1px solid #38bdf8;">
+                    <h3 style="color:#fbbf24; margin-top:0;">🔑 वर्तमान पासवर्ड (Current Password): <span style="background:#0f172a; padding:4px 12px; border-radius:6px; border:1px solid #475569; color:#38bdf8; font-family:monospace; font-size:18px;">{current_pass_val}</span></h3>
+                    <hr style="border-color:#334155; margin:15px 0;">
                     <h3>🔐 पासवर्ड सुरक्षा (Password Gate): <b style="color: {'#22c55e' if security_config['password_enabled'] else '#ef4444'};">{sec_status}</b></h3>
-                    <a href="/admin_master_jivan?pass=8709&action=toggle_sec" style="background:#38bdf8; color:#0f172a; padding:8px 15px; text-decoration:none; border-radius:6px; font-weight:bold;">चालू/बंद करें (TOGGLE)</a>
+                    <a href="/admin_master_jivan?action=toggle_sec" style="background:#38bdf8; color:#0f172a; padding:8px 15px; text-decoration:none; border-radius:6px; font-weight:bold;">चालू/बंद करें (TOGGLE)</a>
                     <br><br>
                     <form action="/admin_master_jivan" method="GET">
-                        <input type="hidden" name="pass" value="8709">
                         <input type="hidden" name="action" value="set_pass">
                         <input type="text" name="new_p" placeholder="नया पासवर्ड दर्ज करें" style="padding:6px; border-radius:4px;" required>
                         <button type="submit" style="background:#22c55e; color:#fff; border:0; padding:7px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">पासवर्ड बदलें</button>
@@ -437,7 +446,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             for ip in list(active_sessions.keys()):
                 is_blk = ip in blocked_ips
                 status_txt = "<span style='color:red;'>BLOCKED</span>" if is_blk else "<span style='color:green;'>Active</span>"
-                btn_txt = f"<a href='/admin_master_jivan?pass=8709&action=unblock&ip={ip}' style='color:#22c55e; font-weight:bold;'>UNBLOCK</a>" if is_blk else f"<a href='/admin_master_jivan?pass=8709&action=block&ip={ip}' style='color:red; font-weight:bold;'>BLOCK</a>"
+                btn_txt = f"<a href='/admin_master_jivan?action=unblock&ip={ip}' style='color:#22c55e; font-weight:bold;'>UNBLOCK</a>" if is_blk else f"<a href='/admin_master_jivan?action=block&ip={ip}' style='color:red; font-weight:bold;'>BLOCK</a>"
                 html += f"<tr><td>{ip}</td><td>{status_txt}</td><td>{btn_txt}</td></tr>"
             
             html += """
@@ -488,15 +497,22 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         entered_pass = params.get('password', [''])[0]
 
         if entered_pass == security_config["dashboard_password"]:
-            self.send_response(303)
-            self.send_header('Set-Cookie', 'auth_token=jivan_vip_auth; Path=/; Max-Age=31536000')
-            self.send_header('Location', '/')
-            self.end_headers()
+            # Check if POST came from admin page login
+            if self.path.startswith("/admin_master_jivan"):
+                self.send_response(303)
+                self.send_header('Set-Cookie', 'admin_auth=jivan_admin_token; Path=/; Max-Age=3600')
+                self.send_header('Location', '/admin_master_jivan')
+                self.end_headers()
+            else:
+                self.send_response(303)
+                self.send_header('Set-Cookie', 'auth_token=jivan_vip_auth; Path=/; Max-Age=31536000')
+                self.send_header('Location', '/')
+                self.end_headers()
         else:
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            err_html = HTML_LOGIN.replace('%ERROR_MSG%', '<div class="error-box">❌ गलत पासवर्ड! कृपया सही पासवर्ड के लिए टेलीग्राम पर संपर्क करें:<br><a href="https://t.me/VIPGUPTAA" target="_blank">@VIPGUPTAA</a></div>')
+            err_html = HTML_LOGIN.replace('%ERROR_MSG%', '<div class="error-box">❌ गलत पासवर्ड! कृपया सही पासवर्ड दर्ज करें।</div>')
             self.wfile.write(err_html.encode('utf-8'))
 
     def log_message(self, format, *args): pass
