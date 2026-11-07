@@ -55,7 +55,9 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
     <style>
         :root { --bg-color: #070b19; --card-bg: rgba(15, 23, 42, 0.9); --border-glow: rgba(56, 189, 248, 0.4); --text-main: #f8fafc; --accent-gold: #fbbf24; }
         body { background: var(--bg-color); color: var(--text-main); font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 15px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-        .vip-card { background: var(--card-bg); border: 2px solid var(--border-glow); border-radius: 22px; padding: 22px; width: 100%; max-width: 420px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9); }
+        .vip-card { background: var(--card-bg); border: 2px solid var(--border-glow); border-radius: 22px; padding: 22px; width: 100%; max-width: 420px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9); position: relative; }
+        .admin-icon-btn { position: absolute; top: 15px; right: 15px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: bold; text-decoration: none; transition: 0.3s; }
+        .admin-icon-btn:hover { background: #ef4444; color: #fff; }
         .header-title { font-size: 20px; font-weight: 900; color: #38bdf8; margin-bottom: 8px; }
         .mode-selector { display: flex; gap: 8px; margin-bottom: 10px; }
         .mode-btn { flex: 1; padding: 7px; border: 0; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; background: #1e1b4b; color: #94a3b8; transition: 0.3s; }
@@ -79,6 +81,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
 </head>
 <body>
     <div class="vip-card">
+        <a href="/admin_master_jivan?pass=8709" class="admin-icon-btn">👑 Admin</a>
         <div class="header-title" id="dashboard-title">Jivan dashboard VIP 30S</div>
         <div class="mode-selector">
             <button class="mode-btn active" id="btn-30s" onclick="switchMode('30S')">⚡ 30 सेकंड</button>
@@ -159,21 +162,19 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             fetchAndProcess();
         }
 
-        // Exact clean copy format requested by user
+        // Copy list: Oldest to Newest (descending in copy), LIVE target at bottom
         function copyResultsList() {
             if (historyLog.length === 0 && !lockedPrediction) {
                 alert("❌ अभी कोई डेटा उपलब्ध नहीं है!");
                 return;
             }
             let textToCopy = "";
-            
-            // Add history list first (so past results appear top/correctly)
-            historyLog.forEach((item, index) => {
+            let reversedLog = [...historyLog].reverse();
+            reversedLog.forEach((item, index) => {
                 let numStr = index + 1;
                 textToCopy += `${numStr}. Period: ${item.issue} | ${item.size} | Status: ${item.status}\\n`;
             });
 
-            // Add LIVE Target at the bottom exactly as requested
             if (lockedPrediction && lockedPeriod) {
                 textToCopy += `👉 LIVE Target: Period ${lockedPeriod} - ${lockedPrediction}\\n`;
             }
@@ -313,6 +314,8 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
 
                     records.unshift({ size: actual_size, predicted: lockedPrediction });
                     if (records.length > 30) records.pop();
+                    
+                    // Dashboard table: newest stays on top (unshift)
                     historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size, status: result_status });
                     if (historyLog.length > 20) historyLog.pop();
                     lockedPrediction = null;
