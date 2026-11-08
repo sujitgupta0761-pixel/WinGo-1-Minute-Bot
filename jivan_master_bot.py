@@ -2,16 +2,39 @@ import http.server
 import socketserver
 import os
 import time
+import json
+import urllib.request
 from urllib.parse import parse_qs, urlparse
 
 active_sessions = {}
 blocked_ips = set()
 
-# User Passwords Database: {"password_string": "Active" / "Blocked"}
-user_passwords_db = {
-    "vip123": "Active",
-    "jivan99": "Active"
-}
+# Firebase Database URL provided by you
+FIREBASE_URL = "https://vipp-b3a35-default-rtdb.firebaseio.com/passwords.json"
+
+def load_passwords():
+    try:
+        req = urllib.request.Request(FIREBASE_URL, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode())
+            if data and isinstance(data, dict):
+                return data
+    except Exception as e:
+        print("Firebase Load Error:", e)
+    # Default fallback if offline
+    return {"vip123": "Active", "jivan99": "Active"}
+
+def save_passwords(db):
+    try:
+        data = json.dumps(db).encode("utf-8")
+        req = urllib.request.Request(FIREBASE_URL, data=data, method='PUT', headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=3) as response:
+            pass
+    except Exception as e:
+        print("Firebase Save Error:", e)
+
+# Permanent User Passwords Database linked with Firebase
+user_passwords_db = load_passwords()
 
 security_config = {
     "password_enabled": True,
@@ -254,24 +277,20 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             
             let recent = history_list.slice(0, 4).map(r => r.size);
             
-            // 1. Strict Zig-Zag Pattern Check
             if (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
                 return { prediction: pred, pattern: "⚡ ZIG-ZAG PATTERN (" + pred + ")" };
             }
             
-            // 2. 2/1 Pattern Flip Check
             if (recent[0] === recent[1] && recent[1] !== recent[2]) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
                 return { prediction: pred, pattern: "🔄 2/1 FLIP TREND (" + pred + ")" };
             }
             
-            // 3. Loss-Shift Recovery Check
             if (shiftToCurrent) { 
                 return { prediction: recent[0], pattern: "🎯 LOSS-SHIFT RECOVERY (" + recent[0] + ")" }; 
             }
             
-            // 4. Streak Counter / Dragon Trend Detection
             let streakCount = 1;
             for (let i = 0; i < recent.length - 1; i++) {
                 if (recent[i] === recent[i+1]) {
@@ -441,12 +460,19 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 if new_p: security_config["dashboard_password"] = new_p
             elif action == 'add_user' and new_upass:
                 user_passwords_db[new_upass.strip()] = "Active"
+                save_passwords(user_passwords_db)
             elif action == 'block_user' and target_upass:
-                if target_upass in user_passwords_db: user_passwords_db[target_upass] = "Blocked"
+                if target_upass in user_passwords_db: 
+                    user_passwords_db[target_upass] = "Blocked"
+                    save_passwords(user_passwords_db)
             elif action == 'unblock_user' and target_upass:
-                if target_upass in user_passwords_db: user_passwords_db[target_upass] = "Active"
+                if target_upass in user_passwords_db: 
+                    user_passwords_db[target_upass] = "Active"
+                    save_passwords(user_passwords_db)
             elif action == 'delete_user' and target_upass:
-                if target_upass in user_passwords_db: del user_passwords_db[target_upass]
+                if target_upass in user_passwords_db: 
+                    del user_passwords_db[target_upass]
+                    save_passwords(user_passwords_db)
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
@@ -482,7 +508,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                     </form>
                 </div>
 
-                <h3>Registered User Passwords & Status</h3>
+                <h3>Registered User Passwords & Status (Firebase Synced)</h3>
                 <table border="1" style="margin:10px auto; width:80%; max-width:600px; border-collapse:collapse; text-align:center;">
                     <tr style="background:#1e293b; color:#38bdf8;"><th>User Password</th><th>Status</th><th>Actions</th></tr>
             """
