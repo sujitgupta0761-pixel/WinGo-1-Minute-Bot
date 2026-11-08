@@ -165,7 +165,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             fetchAndProcess();
         }
 
-        // Copy list: Oldest to Newest, LIVE target at bottom
+        // Copy list format: Oldest to Newest, LIVE target at bottom
         function copyResultsList() {
             if (historyLog.length === 0 && !lockedPrediction) {
                 alert("❌ अभी कोई डेटा उपलब्ध नहीं है!");
@@ -248,13 +248,13 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // --- ENHANCED STREAK COUNTER & PATTERN MATCHING ALGORITHM ---
+        // --- STREAK COUNTER & PATTERN MATCHING ALGORITHM ---
         function analyzeMarketPattern(history_list) {
             if (!history_list || history_list.length < 4) return { prediction: "WAITING", pattern: "मार्केट स्कैन हो रहा है..." };
             
             let recent = history_list.slice(0, 4).map(r => r.size);
             
-            // 1. Strict Zig-Zag Check (e.g. BIG, SMALL, BIG, SMALL)
+            // 1. Strict Zig-Zag Pattern Check
             if (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
                 return { prediction: pred, pattern: "⚡ ZIG-ZAG PATTERN (" + pred + ")" };
@@ -266,12 +266,12 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
                 return { prediction: pred, pattern: "🔄 2/1 FLIP TREND (" + pred + ")" };
             }
             
-            // 3. Loss-Shift Check
+            // 3. Loss-Shift Recovery Check
             if (shiftToCurrent) { 
                 return { prediction: recent[0], pattern: "🎯 LOSS-SHIFT RECOVERY (" + recent[0] + ")" }; 
             }
             
-            // 4. Strong Streak / Dragon Trend Detection (Streak Counter)
+            // 4. Streak Counter / Dragon Trend Detection
             let streakCount = 1;
             for (let i = 0; i < recent.length - 1; i++) {
                 if (recent[i] === recent[i+1]) {
@@ -281,12 +281,10 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
                 }
             }
             
-            // If clear streak of 3 or more is found, follow the dragon
             if (streakCount >= 3) {
-                return { prediction: recent[0], pattern: "🐉 DRAGON TREND STREAK (" + recent[0] + ")" };
+                return { prediction: recent[0], pattern: "🐉 DRAGON STREAK (" + streakCount + "X " + recent[0] + ")" };
             }
 
-            // Default safe trend follow
             return { prediction: recent[0], pattern: "📈 TREND FOLLOW (" + recent[0] + ")" };
         }
 
